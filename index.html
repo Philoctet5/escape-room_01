@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Le Bureau de l'Alchimiste - Escape Room</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #1a1a1a;
+            color: #eee;
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #game-container {
+            position: relative;
+            width: 1024px;
+            height: 576px; /* 16:9 Aspect Ratio */
+            background-image: url('input_file_0.png');
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            box-shadow: 0 0 20px rgba(0,0,0,0.8);
+        }
+
+        /* Hotspots - Invisible clickable areas */
+        .hotspot {
+            position: absolute;
+            cursor: pointer;
+            z-index: 10;
+            /* background-color: rgba(255, 0, 0, 0.2); Debugging: make visible to test */
+        }
+
+        .hotspot:hover {
+            box-shadow: 0 0 10px rgba(255, 255, 200, 0.3);
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        /* Specific Locations (Percentages based on image analysis) */
+        #spot-chandelier { top: 0%; left: 35%; width: 30%; height: 35%; }
+        #spot-door { top: 31%; left: 44%; width: 12%; height: 38%; }
+        #spot-chalkboard { top: 37%; left: 31%; width: 11%; height: 14%; }
+        #spot-clock { top: 18%; left: 61%; width: 7%; height: 13%; }
+        #spot-chest { top: 64%; left: 12%; width: 15%; height: 23%; }
+        #spot-table { top: 63%; left: 32%; width: 36%; height: 30%; }
+
+        /* UI Elements */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 20;
+        }
+
+        #message-box {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.85);
+            border: 2px solid #8b4513;
+            padding: 15px;
+            border-radius: 5px;
+            width: 60%;
+            text-align: center;
+            font-size: 16px;
+            display: none;
+            pointer-events: auto;
+            box-shadow: 0 0 15px #000;
+        }
+
+        #inventory {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border: 1px solid #555;
+            border-radius: 5px;
+            pointer-events: auto;
+        }
+
+        .item {
+            display: inline-block;
+            margin: 5px;
+            padding: 5px 10px;
+            background: #333;
+            border: 1px solid #777;
+            font-size: 12px;
+        }
+
+        /* Keypad Modal */
+        #keypad-modal {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #2a2a2a;
+            border: 4px solid #4a3b2a;
+            padding: 20px;
+            display: none;
+            text-align: center;
+            pointer-events: auto;
+            z-index: 30;
+            box-shadow: 0 0 20px #000;
+        }
+
+        #code-display {
+            background: #000;
+            color: #0f0;
+            font-family: monospace;
+            font-size: 24px;
+            padding: 10px;
+            margin-bottom: 10px;
+            letter-spacing: 5px;
+            border: 1px solid #555;
+        }
+
+        .keypad-btn {
+            width: 40px;
+            height: 40px;
+            margin: 5px;
+            background: #444;
+            border: 1px solid #666;
+            color: white;
+            font-size: 18px;
+            cursor: pointer;
+        }
+
+        .keypad-btn:hover { background: #555; }
+        .close-btn { margin-top: 10px; background: #800; border: none; padding: 5px 15px; color: white; cursor: pointer; }
+
+        /* End Screen */
+        #end-screen {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.95);
+            color: #4CAF50;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            pointer-events: auto;
+        }
+        h1 { font-size: 40px; text-shadow: 0 0 10px #4CAF50; }
+
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <!-- Hotspots -->
+        <div id="spot-chandelier" class="hotspot" onclick="handleClick('chandelier')" title="Lustre"></div>
+        <div id="spot-door" class="hotspot" onclick="handleClick('door')" title="Porte"></div>
+        <div id="spot-chalkboard" class="hotspot" onclick="handleClick('chalkboard')" title="Tableau"></div>
+        <div id="spot-clock" class="hotspot" onclick="handleClick('clock')" title="Horloge"></div>
+        <div id="spot-chest" class="hotspot" onclick="handleClick('chest')" title="Coffre"></div>
+        <div id="spot-table" class="hotspot" onclick="handleClick('table')" title="Table"></div>
+
+        <!-- UI -->
+        <div id="ui-layer">
+            <div id="inventory">
+                <strong>Inventaire:</strong>
+                <div id="inv-list">Vide</div>
+            </div>
+            <div id="message-box" onclick="this.style.display='none'"></div>
+        </div>
+
+        <!-- Keypad -->
+        <div id="keypad-modal">
+            <div style="color: #ccc; margin-bottom: 5px;">MECANISME DE VERROUILLAGE</div>
+            <div id="code-display">----</div>
+            <div>
+                <button class="keypad-btn" onclick="enterDigit(1)">1</button>
+                <button class="keypad-btn" onclick="enterDigit(2)">2</button>
+                <button class="keypad-btn" onclick="enterDigit(3)">3</button><br>
+                <button class="keypad-btn" onclick="enterDigit(4)">4</button>
+                <button class="keypad-btn" onclick="enterDigit(5)">5</button>
+                <button class="keypad-btn" onclick="enterDigit(6)">6</button><br>
+                <button class="keypad-btn" onclick="enterDigit(7)">7</button>
+                <button class="keypad-btn" onclick="enterDigit(8)">8</button>
+                <button class="keypad-btn" onclick="enterDigit(9)">9</button><br>
+                <button class="keypad-btn" onclick="enterDigit(0)">0</button>
+                <button class="keypad-btn" style="background:#800" onclick="clearCode()">C</button>
+                <button class="keypad-btn" style="background:#080" onclick="checkCode()">OK</button>
+            </div>
+            <button class="close-btn" onclick="closeKeypad()">Fermer</button>
+        </div>
+
+        <!-- End Screen -->
+        <div id="end-screen">
+            <h1>LIBRE !</h1>
+            <p>Vous avez ouvert la porte et échappé au bureau de l'Alchimiste.</p>
+            <p>Rechargez la page pour rejouer.</p>
+        </div>
+    </div>
+
+    <script>
+        // Game State
+        const state = {
+            hasKey: false,
+            chestOpen: false,
+            hasNote: false,
+            doorOpen: false,
+            currentCode: ""
+        };
+
+        // DOM Elements
+        const msgBox = document.getElementById('message-box');
+        const invList = document.getElementById('inv-list');
+        const keypad = document.getElementById('keypad-modal');
+        const codeDisplay = document.getElementById('code-display');
+        const endScreen = document.getElementById('end-screen');
+
+        // Logic
+        function showMessage(text) {
+            msgBox.innerHTML = text + "<br><small style='color:#aaa; font-size:10px'>(Cliquez pour fermer)</small>";
+            msgBox.style.display = 'block';
+            setTimeout(() => { 
+                // Auto hide after 6 seconds if user doesn't click
+                // msgBox.style.display = 'none'; 
+            }, 6000);
+        }
+
+        function updateInventory() {
+            let items = [];
+            if (state.hasKey) items.push("<span class='item'>Clé en Argent</span>");
+            if (state.hasNote) items.push("<span class='item'>Vieux Parchemin</span>");
+            
+            if (items.length === 0) invList.innerHTML = "Vide";
+            else invList.innerHTML = items.join("");
+        }
+
+        function handleClick(object) {
+            msgBox.style.display = 'none'; // Clear old messages
+            
+            switch(object) {
+                case 'chandelier':
+                    if (!state.hasKey) {
+                        state.hasKey = true;
+                        showMessage("En regardant de plus près les potions... Tiens ? Une petite <strong>Clé en Argent</strong> était cachée entre les fioles !");
+                        updateInventory();
+                    } else {
+                        showMessage("Juste des fioles colorées qui bouillonnent doucement.");
+                    }
+                    break;
+
+                case 'chest':
+                    if (state.chestOpen) {
+                        showMessage("Le coffre est vide maintenant.");
+                    } else {
+                        if (state.hasKey) {
+                            state.chestOpen = true;
+                            state.hasNote = true;
+                            showMessage("La clé tourne parfaitement ! Vous ouvrez le coffre.<br>À l'intérieur, vous trouvez un <strong>Vieux Parchemin</strong> avec une note mathématique.");
+                            updateInventory();
+                        } else {
+                            showMessage("C'est verrouillé. Il y a une serrure argentée.");
+                        }
+                    }
+                    break;
+
+                case 'chalkboard':
+                    showMessage("Le tableau indique : <strong>'TIME HIDES THE TRUTH'</strong><br><em>(Le temps cache la vérité)</em>.<br>Cela doit avoir un rapport avec l'horloge.");
+                    break;
+
+                case 'clock':
+                    // Base time set to 10:15
+                    showMessage("L'horloge semble arrêtée. Les aiguilles indiquent <strong>10h15</strong>.");
+                    break;
+
+                case 'table':
+                    if (state.hasNote) {
+                        showMessage("Vous étalez le <strong>Vieux Parchemin</strong> trouvé dans le coffre sur la table.<br>Il est écrit : <em>'Ajoutez 30 minutes au temps figé pour trouver la sortie.'</em>");
+                    } else {
+                        showMessage("Une carte ancienne est posée sur la table. Il y a aussi une loupe, mais elle est cassée.");
+                    }
+                    break;
+
+                case 'door':
+                    if (state.doorOpen) {
+                        showMessage("La porte est déjà ouverte !");
+                    } else {
+                        showMessage("La porte est massive. Il y a un pavé numérique étrange au centre.");
+                        openKeypad();
+                    }
+                    break;
+            }
+        }
+
+        // Keypad Logic
+        function openKeypad() {
+            keypad.style.display = 'block';
+            state.currentCode = "";
+            updateDisplay();
+        }
+
+        function closeKeypad() {
+            keypad.style.display = 'none';
+        }
+
+        function enterDigit(digit) {
+            if (state.currentCode.length < 4) {
+                state.currentCode += digit;
+                updateDisplay();
+            }
+        }
+
+        function clearCode() {
+            state.currentCode = "";
+            updateDisplay();
+        }
+
+        function updateDisplay() {
+            let display = state.currentCode.padEnd(4, '-');
+            codeDisplay.innerText = display;
+        }
+
+        function checkCode() {
+            // Puzzle Logic:
+            // Clock: 10:15
+            // Note: + 30 mins
+            // Result: 10:45 -> Code 1045
+            if (state.currentCode === "1045") {
+                closeKeypad();
+                endGame();
+            } else {
+                codeDisplay.style.color = "red";
+                setTimeout(() => {
+                    codeDisplay.style.color = "#0f0";
+                    clearCode();
+                }, 500);
+            }
+        }
+
+        function endGame() {
+            state.doorOpen = true;
+            endScreen.style.display = 'flex';
+        }
+
+        // Initial Message
+        setTimeout(() => {
+            showMessage("Vous vous réveillez enfermé dans cette pièce étrange.<br>La porte verte semble être la seule issue.");
+        }, 500);
+
+    </script>
+</body>
+</html>
